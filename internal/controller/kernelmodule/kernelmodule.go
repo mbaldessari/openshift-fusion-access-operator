@@ -242,7 +242,7 @@ FROM ${IBM_SCALE} as src_image
 FROM ${DTK_AUTO} as builder
 COPY --from=src_image /usr/lpp/mmfs /usr/lpp/mmfs
 RUN /usr/lpp/mmfs/bin/mmbuildgpl
-FROM registry.redhat.io/ubi9/ubi-minimal
+FROM kuemper.int.rhx/bandini/ubi9-kmod:latest
 ARG KERNEL_FULL_VERSION
 RUN mkdir -p /opt/lib/modules/${KERNEL_FULL_VERSION}
 COPY --from=builder /lib/modules/${KERNEL_FULL_VERSION}/extra/*.ko /opt/lib/modules/${KERNEL_FULL_VERSION}/
