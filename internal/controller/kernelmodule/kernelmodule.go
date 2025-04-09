@@ -21,16 +21,16 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/openshift-storage-scale/openshift-fusion-access-operator/internal/utils"
 	"github.com/pkg/errors"
-	"gopkg.in/yaml.v3"
-
 	kmmv1beta1 "github.com/rh-ecosystem-edge/kernel-module-management/api/v1beta1"
+	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/openshift-storage-scale/openshift-fusion-access-operator/internal/utils"
 )
 
 const (
@@ -80,7 +80,11 @@ func CreateOrUpdateKMMResources(ctx context.Context, cl client.Client, pullSecre
 	return nil
 }
 
-func createOrUpdateConfigmap(ctx context.Context, cl client.Client, configmap *corev1.ConfigMap) error {
+func createOrUpdateConfigmap(
+	ctx context.Context,
+	cl client.Client,
+	configmap *corev1.ConfigMap,
+) error {
 	oldCM := &corev1.ConfigMap{}
 	if err := cl.Get(ctx, client.ObjectKeyFromObject(configmap), oldCM); apierrors.IsNotFound(err) {
 		if err := cl.Create(ctx, configmap); err != nil {
@@ -100,7 +104,9 @@ func createOrUpdateConfigmap(ctx context.Context, cl client.Client, configmap *c
 
 func createOrUpdateSecret(ctx context.Context, cl client.Client, secret *corev1.Secret) error {
 	oldSecret := &corev1.Secret{}
-	if err := cl.Get(ctx, client.ObjectKeyFromObject(secret), oldSecret); apierrors.IsNotFound(err) {
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(secret), oldSecret); apierrors.IsNotFound(
+		err,
+	) {
 		if err := cl.Create(ctx, secret); err != nil {
 			return errors.Wrap(err, "could not create secret")
 		}
@@ -141,22 +147,24 @@ func NewKMMModule(namespace, ibmScaleImage string) *kmmv1beta1.Module {
 			Namespace: namespace,
 		},
 		Spec: kmmv1beta1.ModuleSpec{
-
 			ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
 				Container: kmmv1beta1.ModuleLoaderContainerSpec{
 					Modprobe: kmmv1beta1.ModprobeSpec{
 						ModuleName: "mmfslinux",
 					},
 					KernelMappings: []kmmv1beta1.KernelMapping{
-						kmmv1beta1.KernelMapping{
-							Regexp:         "^.*\\.x86_64$",
-							ContainerImage: fmt.Sprintf("image-registry.openshift-image-registry.svc:5000/%s/gpfs_compat_kmod:${KERNEL_FULL_VERSION}", namespace),
+						{
+							Regexp: "^.*\\.x86_64$",
+							ContainerImage: fmt.Sprintf(
+								"image-registry.openshift-image-registry.svc:5000/%s/gpfs_compat_kmod:${KERNEL_FULL_VERSION}",
+								namespace,
+							),
 							Build: &kmmv1beta1.Build{
 								DockerfileConfigMap: &corev1.LocalObjectReference{
 									Name: ConfigMapName,
 								},
 								BuildArgs: []kmmv1beta1.BuildArg{
-									kmmv1beta1.BuildArg{
+									{
 										Name:  "IBM_SCALE",
 										Value: ibmScaleImage,
 									},
@@ -185,7 +193,12 @@ func NewKMMModule(namespace, ibmScaleImage string) *kmmv1beta1.Module {
 }
 
 // patchGlobalPullSecret will patch the global pull secret with the ibm pull secrets
-func patchGlobalPullSecret(ctx context.Context, cl client.Client, namespace string, pullsecret string) (*corev1.Secret, error) {
+func patchGlobalPullSecret(
+	ctx context.Context,
+	cl client.Client,
+	namespace string,
+	pullsecret string,
+) (*corev1.Secret, error) {
 	var secrets map[string]map[string]map[string]string
 	if err := json.Unmarshal([]byte(pullsecret), &secrets); err != nil {
 		return nil, err
@@ -226,7 +239,14 @@ func patchGlobalPullSecret(ctx context.Context, cl client.Client, namespace stri
 // getIBMCoreImage gets the core init image with the source code in them
 func getIBMCoreImage(ctx context.Context, cl client.Client) (string, error) {
 	cm := &corev1.ConfigMap{}
-	cl.Get(ctx, types.NamespacedName{Namespace: "ibm-spectrum-scale-operator", Name: "ibm-spectrum-scale-manager-config"}, cm)
+	cl.Get(
+		ctx,
+		types.NamespacedName{
+			Namespace: "ibm-spectrum-scale-operator",
+			Name:      "ibm-spectrum-scale-manager-config",
+		},
+		cm,
+	)
 	var objmap map[string]interface{}
 	if err := yaml.Unmarshal([]byte(cm.Data["controller_manager_config.yaml"]), &objmap); err != nil {
 		return "", err
@@ -246,7 +266,6 @@ FROM kuemper.int.rhx/bandini/ubi9-kmod:latest
 ARG KERNEL_FULL_VERSION
 RUN mkdir -p /opt/lib/modules/${KERNEL_FULL_VERSION}
 COPY --from=builder /lib/modules/${KERNEL_FULL_VERSION}/extra/*.ko /opt/lib/modules/${KERNEL_FULL_VERSION}/
-RUN microdnf install kmod -y && microdnf clean all
 RUN depmod -b /opt`
 
 	return &corev1.ConfigMap{
