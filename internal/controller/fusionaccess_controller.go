@@ -313,20 +313,21 @@ func (r *FusionAccessReconciler) Reconcile(
 	log.Log.Info(fmt.Sprintf("Applied manifest from %s", install_path))
 
 	// We try and create the entitlement secrets only if we found the "fusion-pullsecret" in our namespace
-	// If we don't find it, we don't create the entitlement secrets and we keep going as a user might be
-	// patching the global pull secret
+	// If we don't find it, we go back to reconcile
+	// FIXME(bandini): Let's keep reconciling even without the secret and maybe add a watch to the pull secret
+	// and trigger a reconcile when it changes or when it's created
 	secret, err := getPullSecretContent(FUSIONPULLSECRETNAME, ns, ctx, r.fullClient)
 	if err != nil {
-		log.Log.Info("Pull secret not found, skipping entitlement secret creation")
-	} else {
-		// Create entitlement secrets
-		err = updateEntitlementPullSecrets(secret, ctx, r.fullClient)
-		if err != nil {
-			log.Log.Error(err, "Error creating entitlement secrets")
-			return reconcile.Result{}, err
-		}
-		log.Log.Info("Entitlement secrets created")
+		log.Log.Error(err, "Pull secret not found, skipping entitlement secret creation")
+		return reconcile.Result{}, err
 	}
+
+	err = updateEntitlementPullSecrets(secret, ctx, r.fullClient)
+	if err != nil {
+		log.Log.Error(err, "Error creating entitlement secrets")
+		return reconcile.Result{}, err
+	}
+	log.Log.Info("Entitlement secrets created")
 
 	if err := console.CreateOrUpdatePlugin(ctx, r.Client); err != nil {
 		return ctrl.Result{}, err
